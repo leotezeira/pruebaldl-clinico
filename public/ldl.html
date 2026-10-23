@@ -1,0 +1,99 @@
+﻿<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="LDL"><meta name="theme-color" content="#0b1220">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LDL – Nivel de molestia</title>
+
+<link rel="stylesheet" href="css/ldl.css"></head><body><main>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"><symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol><symbol id="i-tuning" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></symbol><symbol id="i-volume" viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3zM16 9a5 5 0 0 1 0 6m2-9a9 9 0 0 1 0 12"/></symbol><symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4M4 20h17M7 16l4-5 3 2 6-7"/></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5m4-1v5l4 2"/></symbol><symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h12l4 4v14H3V3zM7 3v6h10V3M7 21v-8h10v8"/></symbol><symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 3 2 21h20L12 3zM12 9v5m0 3h.01"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6"/></symbol><symbol id="i-play" viewBox="0 0 24 24"><path d="m7 4 14 8-14 8z"/></symbol></svg><nav class="nav"><button class="nav-btn active" data-page="pg-paciente"><svg class="icon"><use href="#i-user"></use></svg><span>Paciente</span></button><button class="nav-btn" data-page="pg-config"><svg class="icon"><use href="#i-tuning"></use></svg><span>Config</span></button><button class="nav-btn" data-page="pg-prueba"><svg class="icon"><use href="#i-volume"></use></svg><span>Prueba</span></button><button class="nav-btn" data-page="pg-resultado"><svg class="icon"><use href="#i-chart"></use></svg><span>Resultado</span></button><button class="nav-btn" data-page="pg-historial"><svg class="icon"><use href="#i-history"></use></svg><span>Historial</span></button></nav>
+<div class="header"><div class="sub">NIVEL DE MOLESTIA</div><h1>Prueba LDL</h1><div class="divider"></div></div>
+<button class="sec noprint" id="hbtn" style="margin:0 0 12px"><svg class="icon icon-inline"><use href="#i-history"></use></svg>Historial de pruebas</button>
+
+<section id="s0" class="page active">
+<div class="card k-pt"><b><svg class="icon icon-inline"><use href="#i-user"></use></svg>Datos del paciente</b>
+<input id="pn" placeholder="Nombre"><div class="row"><input id="pa" placeholder="Edad" inputmode="numeric"><input id="pd" type="date"></div>
+<textarea id="pt" rows="2" placeholder="Notas (equipo, observaciones)"></textarea></div></section>
+
+<section id="pg-config" class="page hide"><div class="card k-cfg"><b><svg class="icon icon-inline"><use href="#i-tuning"></use></svg>Configuración</b>
+<label class="mu">Estímulo</label>
+<select id="stim"><option value="tono">Tono puro</option><option value="banda">Ruido de banda estrecha</option><option value="habla">Ruido tipo habla (sin frecuencia)</option></select>
+<label class="mu">Modo de uso</label>
+<select id="who"><option value="pac">Autoaplicado (el paciente usa la pantalla)</option><option value="clin">Clínico (el examinador controla todo)</option></select>
+<label class="mu">Método</label>
+<select id="mode"><option value="directo">Directo: el paciente indica "molesto"</option><option value="contour">Escala Contour (7 categorías)</option></select>
+<label class="mu">Nivel máximo de seguridad: <b id="mxv">-6</b> dB (relativo)</label>
+<input type="range" id="mx" min="-24" max="-3" value="-6">
+<div class="row"><div><label class="mu">Paso (dB)</label><select id="stp"><option>1</option><option>2</option><option selected>5</option><option>10</option></select></div>
+<div><label class="mu">Nivel inicial</label><select id="st0"><option value="-70">-70</option><option value="-60" selected>-60</option><option value="-50">-50</option><option value="-40">-40</option></select></div></div>
+<label class="mu">Corrección a dB HL (dB HL = nivel + X). Valor orientativo sin calibrar:</label>
+<input id="off" type="number" value="90">
+<details><summary>Umbrales audiométricos (dB HL, opcional)</summary><div id="thg"></div></details></div>
+
+<div class="card warn k-go"><b>Antes de empezar</b>
+<p class="mu">Auriculares, lugar silencioso. Pulsa la referencia y ajusta el volumen del dispositivo a algo <b>cómodo y suave</b>; no lo cambies después.</p>
+<button class="sec" id="ref"><svg class="icon icon-inline"><use href="#i-play"></use></svg>Tono de referencia (1 kHz, suave)</button>
+<p class="mu"><svg class="icon icon-inline icon-warning"><use href="#i-warning"></use></svg>Herramienta de cribado/educativa: sin calibración con equipo certificado, los dB HL son estimados. No usar para fijar MPO sin verificación clínica.</p>
+<div class="mu" id="calst"></div><button id="calbtn"><svg class="icon icon-inline"><use href="#i-tuning"></use></svg>Calibración guiada (sonómetro)</button><button id="start">Iniciar prueba</button></div>
+</section>
+<section id="s1" class="page hide"><div class="oido-sel"><span class="oido-btn" id="ldl-ear-oi">× OI</span><span class="oido-btn active" id="ldl-ear-od">○ OD</span></div><div class="freqs" id="ldl-freqs"></div><div class="card">
+<div class="lbl" id="prog"></div><div class="big" id="cond"></div>
+<div class="lbl">Nivel actual</div><div class="big" id="lvl"></div><div id="lvl-hl" class="mu" style="text-align:center"></div>
+<div class="bar"><i id="bf" style="width:0"></i></div>
+<button id="play">Reproducir tono</button>
+<div id="dir"><p class="mu" style="text-align:center">¿Es <b>molesto</b> (no doloroso)?</p>
+<div class="row"><button class="sec" id="dn">− 5 dB</button><button class="sec" id="up">+ 5 dB</button></div>
+<button class="bad" id="mol">Es molesto → registrar</button></div>
+<div id="con" class="cats hide"><p class="mu" style="text-align:center">¿Qué tan fuerte lo siente?</p>
+<button data-k="1">1 · Muy suave</button><button data-k="2">2 · Suave</button><button data-k="3">3 · Confortable pero suave</button><button data-k="4">4 · Confortable</button><button data-k="5">5 · Confortable pero fuerte</button><button data-k="6">6 · Fuerte pero aceptable</button><button data-k="7">7 · Molesto</button></div>
+<button class="sec" id="nomol">Sin molestia en el máximo</button>
+<div id="clin" class="hide" style="border-top:1px solid var(--bd);margin-top:12px;padding-top:6px"><div class="mu"><b>Panel clínico</b></div>
+<label class="mu">Ir a:</label><select id="jmp"></select>
+<div class="row"><button class="sec" id="prv">← Anterior</button><button class="sec" id="skp">Saltar →</button></div>
+<div class="row"><input id="mv" type="number" inputmode="numeric" placeholder="LDL manual (dB rel.)" style="margin-top:8px"><button class="sec" id="man">Registrar</button></div>
+<button id="fin">Finalizar y ver resultados</button></div>
+</div></section>
+
+<section id="s2" class="page hide">
+<div class="card k-res"><b><svg class="icon icon-inline"><use href="#i-chart"></use></svg>Resultados LDL</b><div class="mu" id="hdr"></div>
+<div class="tbw"><table id="tb"></table></div></div>
+<div id="charts"></div>
+<div class="card"><b>Interpretación orientativa</b><p class="mu" id="note"></p></div>
+<div class="noprint"><button id="pdf">Guardar / imprimir PDF</button><button class="sec" id="copy">Copiar resultados</button><button class="sec" id="h2"><svg class="icon icon-inline"><use href="#i-history"></use></svg>Historial</button><button class="sec" id="again">Nueva prueba</button></div>
+</section>
+<section id="s4" class="page hide"><div class="card k-cal"><b><svg class="icon icon-inline"><use href="#i-tuning"></use></svg>Calibración guiada</b>
+<ol class="mu"><li>Fija el volumen del dispositivo y <b>no lo cambies</b> después (ni al medir ni al evaluar).</li><li>Acopla el sonómetro (ideal: oído artificial o acoplador) al auricular. Aleja el auricular de tu oído.</li><li>Pulsa el botón de reproducción (tono de 10 s a -20 dB relativos) y anota el SPL medido.</li><li>Guarda: la app calcula la corrección a dB HL por frecuencia: SPL − (−20) − RETSPL.</li></ol>
+<label class="mu">Transductor (RETSPL de referencia; verifica con tu norma o fabricante)</label>
+<select id="trn"><option value="tdh">Supra-aural TDH-49/50 (ANSI S3.6)</option><option value="er3">Inserción ER-3A</option><option value="cus">Personalizado</option></select>
+<div id="calg"></div><div class="mu" id="calres"></div>
+<p class="mu">Un sonómetro de celular sin acoplador solo da un valor aproximado. Si dejas el oído izquierdo vacío, se usa la calibración del derecho.</p>
+<button id="calsave">Guardar calibración</button><button id="calclr">Borrar calibración</button><button id="calb">← Volver</button></div></section>
+<section id="s3" class="page hide"><div class="card"><b>Historial</b>
+<select id="hp"></select><div id="hl"></div>
+<button id="cmpb" class="sec">Comparar las 2 marcadas</button><button id="csvp" class="sec">Copiar CSV (este paciente)</button><button id="csva" class="sec">Copiar CSV (todos)</button>
+<textarea id="csvbox" rows="5" class="hide" readonly></textarea></div>
+<div class="card k-bk"><b><svg class="icon icon-inline"><use href="#i-save"></use></svg>Respaldo</b>
+<p class="mu">Guarda un archivo con todo tu historial y súbelo a Google Drive. También puedes pedirme en el chat que lo guarde en Drive: pega el contenido.</p>
+<button id="bkp">Guardar respaldo (.json)</button><button id="csvs">Guardar CSV</button>
+<button id="rstb">Restaurar respaldo…</button><input type="file" id="rst" accept=".json,application/json" class="hide"><div class="mu" id="bst"></div></div>
+<div class="card"><b>Evolución del LDL promedio</b><div id="evo"></div></div>
+<div id="cmp"></div>
+<button class="sec" id="hb">← Volver</button></section>
+</main><div class="footer-note">LDL · Niveles relativos, no dB HL sin calibración · Usar auriculares calibrados · Solo referencia clínica</div>
+
+<script src="js/constants.js"></script><script src="js/ldl/ldl-state.js"></script><script src="js/ldl/ldl-audio.js"></script><script src="js/ldl/ldl-app.js"></script></body></html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

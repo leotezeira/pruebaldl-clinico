@@ -1,0 +1,566 @@
+# Manual: llevar el LDL a la estética del Audiómetro Clínico Pro
+
+Objetivo: que `ldl.html` se vea y se sienta como parte de la misma app (mismo lenguaje visual, misma navegación, mismos componentes), sin romper la lógica que ya funciona.
+
+---
+
+## 0. Diagnóstico: qué difiere hoy
+
+| Aspecto | Audiómetro (referencia) | LDL actual | Acción |
+|---|---|---|---|
+| Estructura | `index.html` + `css/` + `js/` modulares | Todo en un solo `ldl.html` | Separar en archivos |
+| Navegación | Barra inferior fija con 5 pestañas e íconos SVG | Secciones que se ocultan con `go()`, sin barra | Agregar `.nav` inferior |
+| Encabezado | `.header` (sub en mayúsculas + h1 + divider degradé) | `<h1>` simple con emoji | Usar `.header` |
+| Botones | Fondo blanco, **borde y texto de color**, sube 2px al hover | Rellenos de color sólido | Usar `.btn .btn-*` |
+| Íconos | Sprite SVG inline (`<use href="#i-...">`) | Emojis (🔊 ⚙️ 📊) | Reemplazar por sprite |
+| Tema | Claro, "health-tech" | Claro + modo oscuro automático | Dejar solo claro (consistencia) |
+| Colores de oído | **OD = azul `#2563eb` ○ · OI = teal `#14b8a6` ×** | Derecho = **rojo**, Izquierdo = azul | Unificar con `COLOR_OD/OI` |
+| Tarjetas | `.card` con título uppercase azul de 12px | Bordes laterales de colores por sección | Usar `.card` + `.card-title` |
+| Gráficos | `.audiogram-wrap` con título y leyenda | `<div class="card">` con SVG | Usar `.audiogram-wrap` |
+
+> Regla de oro: **no inventes estilos nuevos si ya existe una clase en `styles.css`**. El LDL debe cargar el mismo `styles.css` y solo sumar un `ldl.css` pequeño para lo específico.
+
+---
+
+## 1. Estructura de archivos recomendada
+
+Dentro de `public/` (para que el deploy de GitHub Pages y el service worker lo tomen):
+
+```
+public/
+├── index.html            ← Audiómetro (ya existe)
+├── ldl.html              ← NUEVO shell del LDL (HTML limpio)
+├── css/
+│   ├── styles.css        ← compartido, NO duplicar
+│   └── ldl.css           ← solo lo específico del LDL
+└── js/
+    ├── constants.js      ← compartido (COLOR_OD, COLOR_OI, etc.)
+    ├── ldl/
+    │   ├── ldl-state.js      (conds, res, L, START, STEP, cal…)
+    │   ├── ldl-audio.js      (tone(), NB(), init())
+    │   ├── ldl-calibration.js(RET, buildCal, calc, offK)
+    │   ├── ldl-charts.js     (grid, chart, bars, evo, cmp)
+    │   ├── ldl-storage.js    (loadH, saveS, delS, backup/restore, csv)
+    │   ├── ldl-ui.js         (go, show, render, hist)
+    │   └── ldl-app.js        (wiring de eventos)
+```
+
+Pasos:
+1. Mové `ldl.html` a `public/ldl.html`.
+2. Sacá el `<style>` y el `<script>` inline. El CSS que quede específico va a `ldl.css`; el JS se parte en los módulos de arriba **sin cambiar la lógica** (solo cortar y pegar funciones).
+3. Agregá `ldl.html`, `css/ldl.css` y `js/ldl/*.js` a `CORE_ASSETS` en `sw.js` y subí `CACHE_VERSION` a `"v3"`.
+4. Agregá un acceso cruzado entre ambas apps (ver sección 9).
+
+> Importante: usá una clave de storage distinta (`ldl_hist_v1`, `ldl_cal` ya lo son). No la mezcles con `audiometro_historial`.
+
+---
+
+## 2. Design tokens (copiar tal cual desde `styles.css`)
+
+El LDL **no redefine** variables: hereda `:root` de `styles.css`. Solo agregá en `ldl.css` los tokens propios:
+
+```css
+/* ldl.css */
+:root {
+  --range-color: #7c3aed;   /* rango dinámico */
+  --ldl-color:   #f59e0b;   /* marcador LDL (reutiliza --warning) */
+  --ldl-normal:  #10b981;   /* zona LDL normal ≥ 90 dB HL (reutiliza --success) */
+}
+```
+
+Paleta que ya existe y debés usar:
+
+| Token | Valor | Uso en LDL |
+|---|---|---|
+| `--primary` | `#2563eb` | títulos de tarjeta, estado activo, OD |
+| `--secondary` | `#14b8a6` | OI |
+| `--success` | `#10b981` | "Iniciar", "Correcta", LDL normal |
+| `--danger` | `#ef4444` | "Es molesto", borrar |
+| `--warning` | `#f59e0b` | LDL medido, avisos |
+| `--bg / --surface / --border` | `#f8fafc / #fff / #e2e8f0` | fondo, tarjetas, bordes |
+| `--text-primary/secondary/muted` | `#0f172a / #334155 / #64748b` | jerarquía de texto |
+
+Tipografía: la misma pila del `body` (system-ui). Tamaños: título de tarjeta 12px uppercase `letter-spacing:2px`; `h1` 26px; valores grandes 36px (`.db-display`).
+
+---
+
+## 3. Corrección de bugs de `styles.css` que afectan al LDL
+
+Antes de reutilizarlo, arreglá estas inconsistencias (también mejoran el audiómetro):
+
+```css
+/* Selector de oído: hoy OD activo usa rojo y OI azul (invertido) */
+.oido-btn.od.active {
+  border-color: var(--od-color);
+  background: rgba(37, 99, 235, 0.10);
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.15);
+}
+.oido-btn.oi.active {
+  border-color: var(--oi-color);
+  background: rgba(20, 184, 166, 0.10);
+  box-shadow: 0 0 20px rgba(20, 184, 166, 0.15);
+}
+.oido-btn { background: var(--surface); }  /* hoy es rgba(255,255,255,.05): invisible en fondo claro */
+
+/* Badges con poco contraste sobre blanco */
+.clasif-leve     { color: #a16207; background: rgba(234,179,8,.15); border-color: #ca8a04; }
+.clasif-moderada { color: #b45309; }
+.clasif-severa   { color: #c2410c; }
+```
+
+Y en `index.html` la leyenda del audiograma dice "○ OI rojo / × OD azul" pero el código dibuja OD = ○ azul y OI = × teal. Corregila para que el LDL y el audiómetro cuenten lo mismo:
+`○ OD (azul)` · `× OI (teal)`.
+
+---
+
+## 4. Esqueleto HTML del LDL
+
+Head idéntico al del audiómetro (PWA, tema, estilos):
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="LDL">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="logoappclinica.png" type="image/png">
+  <title>LDL · Nivel de Molestia</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/ldl.css">
+</head>
+<body>
+  <!-- 1) sprite SVG: copiá el del index.html y agregá los íconos que falten (ver §6) -->
+  <!-- 2) <nav class="nav"> con 5 botones -->
+  <!-- 3) 5 × <div class="page"> -->
+  <!-- 4) <div class="footer-note"> -->
+  <!-- 5) scripts -->
+</body>
+</html>
+```
+
+### Navegación inferior (5 pestañas)
+
+| Pestaña | Page id | Reemplaza a | Ícono |
+|---|---|---|---|
+| Paciente | `pg-paciente` | tarjeta "Datos del paciente" de `s0` | `i-user` |
+| Config | `pg-config` | tarjeta "Configuración" + "Antes de empezar" de `s0` | `i-tuning` |
+| Prueba | `pg-prueba` | `s1` | `i-volume` |
+| Resultado | `pg-resultado` | `s2` | `i-chart` |
+| Historial | `pg-historial` | `s3` (+ respaldo) | `i-history` |
+
+La calibración (`s4`) **no** va en la barra: es una sub-pantalla de Config (`pg-calibracion`), con botón "← Volver a Config".
+
+```html
+<nav class="nav">
+  <button class="nav-btn active" data-page="pg-paciente" title="Paciente">
+    <svg class="icon"><use href="#i-user"></use></svg><span>Paciente</span>
+  </button>
+  <button class="nav-btn" data-page="pg-config"    title="Configuración"><svg class="icon"><use href="#i-tuning"></use></svg><span>Config</span></button>
+  <button class="nav-btn" data-page="pg-prueba"    title="Prueba LDL">  <svg class="icon"><use href="#i-volume"></use></svg><span>Prueba</span></button>
+  <button class="nav-btn" data-page="pg-resultado" title="Resultados">  <svg class="icon"><use href="#i-chart"></use></svg><span>Resultado</span></button>
+  <button class="nav-btn" data-page="pg-historial" title="Historial">   <svg class="icon"><use href="#i-history"></use></svg><span>Historial</span></button>
+</nav>
+```
+
+### Encabezado de cada página
+
+```html
+<div class="header">
+  <div class="sub"><svg class="icon"><use href="#i-volume"></use></svg> Nivel de Molestia</div>
+  <h1>Prueba LDL</h1>
+  <div class="divider"></div>
+</div>
+```
+
+### Página Paciente (ejemplo completo, mismos ids que el original)
+
+```html
+<div id="pg-paciente" class="page active">
+  <div class="header">…</div>
+  <div class="card">
+    <div class="card-title"><svg class="icon"><use href="#i-user"></use></svg> Datos del paciente</div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2"><label>Nombre completo</label><input id="pn" placeholder="Apellido, Nombre"></div>
+      <div class="form-group"><label>Edad</label><input id="pa" inputmode="numeric" placeholder="Años"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Fecha</label><input id="pd" type="date"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Notas</label><input id="pt" placeholder="Equipo, observaciones…"></div>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-success" data-page="pg-config">Continuar →</button>
+  </div>
+</div>
+```
+
+> Cambio menor: `#pt` pasa de `<textarea>` a `<input>` para igualar al audiómetro. Si querés conservar el textarea, agregá `.form-group textarea` a las reglas de `input/select` en `ldl.css`.
+
+### Página Config
+
+Mismo orden que hoy, pero con componentes del audiómetro:
+- Estímulo / Modo / Método → `<select>` dentro de `.form-group` (mismo estilo que el resto de formularios).
+- Nivel máximo de seguridad → `input[type=range]` + `.range-labels` (`-24 dB` … `-3 dB`) y el valor grande en `.db-display` color `--danger`.
+- Umbrales opcionales → `<details>` estilizado dentro de `.card`.
+- "Antes de empezar" → `.card` con borde `--warning` (ver `ldl.css` abajo).
+- Botones: `Tono de referencia` = `.btn-primary`, `Calibración guiada` = `.btn-primary`, `Iniciar prueba` = `.btn-success`.
+
+### Página Prueba (la más importante en usabilidad)
+
+Se arma con **componentes que el usuario ya conoce del audiómetro**:
+
+```html
+<div id="pg-prueba" class="page">
+  <div class="header">…</div>
+
+  <!-- Oído actual: mismo componente que el selector, pero informativo -->
+  <div class="oido-sel">
+    <span class="oido-btn oi" id="ldl-ear-oi">× OI</span>
+    <span class="oido-btn od active" id="ldl-ear-od">○ OD</span>
+  </div>
+
+  <!-- Frecuencias: mismos chips .freq-btn, con estado hecho/actual/pendiente -->
+  <div class="freqs" id="ldl-freqs"></div>
+
+  <div class="card">
+    <div class="db-level-info">
+      <span class="card-title" style="margin:0">Nivel actual</span>
+      <span><span class="db-display" id="lvl">-60</span> <span class="db-unit">dB rel.</span></span>
+    </div>
+    <div class="progress"><i id="bf"></i></div>
+    <div class="range-labels"><span id="lvl-min">-60</span><span id="lvl-max">máx −6</span></div>
+    <div class="mask-label" id="lvl-hl" style="text-align:center;margin-top:8px">≈ 30 dB HL</div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary" id="play">▶ Reproducir</button>
+  </div>
+
+  <!-- Modo directo -->
+  <div id="dir">
+    <div class="btn-row">
+      <button class="btn btn-primary" id="dn">− 5 dB</button>
+      <button class="btn btn-primary" id="up">+ 5 dB</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="mol">Es molesto → registrar</button>
+      <button class="btn btn-primary" id="nomol">Sin molestia en el máximo</button>
+    </div>
+  </div>
+
+  <!-- Modo Contour: reemplaza .cats -->
+  <div id="con" class="card hide">
+    <div class="card-title">¿Qué tan fuerte lo siente?</div>
+    <div class="contour-list">
+      <button class="contour-btn" data-k="1">1 · Muy suave</button>
+      <!-- … hasta 7 · Molesto -->
+    </div>
+  </div>
+
+  <!-- Panel clínico (solo modo clínico) -->
+  <div id="clin" class="card hide"> … </div>
+
+  <div class="mensaje" id="msg-prueba" aria-live="polite"></div>
+</div>
+```
+
+Qué mejora la intuición:
+- **El oído y la frecuencia siempre visibles** (hoy el usuario solo lee "Prueba 3 de 8").
+- Chips de frecuencia como progreso: hecha = relleno suave verde, actual = activa azul, pendiente = borde gris.
+- Barra de progreso fina con los mismos colores del slider.
+- El nivel en HL aproximado en texto chico debajo, no mezclado con el número principal.
+- Botones de la misma altura (44px) y en `.btn-row`, igual que Emitir/Marcar/Borrar del audiómetro.
+
+### Página Resultado
+
+```html
+<div id="pg-resultado" class="page">
+  <div class="header">…</div>
+  <div class="card"><div class="card-title"><svg class="icon"><use href="#i-user"></use></svg> Datos del paciente</div><div id="hdr"></div></div>
+  <div class="resumen-grid" id="resumen-grid"></div>   <!-- LDL medio OD/OI, rango medio OD/OI -->
+  <div id="charts"></div>                               <!-- uno .audiogram-wrap por oído -->
+  <div class="card"><div class="card-title"><svg class="icon"><use href="#i-clipboard"></use></svg> Tabla de resultados</div><div class="tbw"><table id="tb"></table></div></div>
+  <div class="card"><div class="card-title"><svg class="icon"><use href="#i-search"></use></svg> Interpretación orientativa</div><p id="note"></p></div>
+  <div class="btn-row">
+    <button class="btn btn-success" id="save-now">Guardar</button>
+    <button class="btn btn-primary" id="pdf">Compartir PDF</button>
+    <button class="btn btn-primary" id="copy">Copiar</button>
+    <button class="btn btn-primary" id="again">Nueva prueba</button>
+  </div>
+</div>
+```
+
+- Los 4 valores clave (LDL medio OD/OI, Rango medio OD/OI) se muestran con `.resumen-grid` + `.resumen-item` (igual que PTA y Discriminación en el audiómetro), en vez de chips sueltos.
+- Los badges de `⚠ LDL < 90` / `✔ LDL ≥ 90` usan `.clasif-badge` con `.clasif-profunda` (alerta) / `.clasif-normal`.
+- El PDF: hoy el LDL usa `window.print()`. Para ser consistente con el audiómetro (PWA/iOS), reutilizá `jspdf.umd.min.js` y armá `ldl-pdf.js` copiando la estructura de `pdf.js` (header azul oscuro `26,32,60`, tarjeta de paciente, bloque por oído con tabla, footer con paginado).
+
+---
+
+## 5. `ldl.css` completo (solo lo específico)
+
+```css
+/* ============ LDL · extensiones sobre styles.css ============ */
+:root {
+  --range-color: #7c3aed;
+  --ldl-color: #f59e0b;
+  --ldl-normal: #10b981;
+}
+
+.hide { display: none !important; }
+
+/* Tarjeta de aviso */
+.card.warn { border-color: rgba(245, 158, 11, 0.55); background: #fffbeb; }
+.mu { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+
+/* Barra de progreso (igual look que el slider) */
+.progress { height: 6px; border-radius: 5px; background: rgba(37, 99, 235, 0.18); overflow: hidden; }
+.progress > i { display: block; height: 100%; width: 0; background: var(--primary); transition: width .25s ease; }
+
+/* Chips de frecuencia con estado */
+.freq-btn.done    { border-color: rgba(16,185,129,.55); background: rgba(16,185,129,.08); color: #047857; }
+.freq-btn.current { border-color: rgba(37,99,235,.65);  background: rgba(37,99,235,.08);  color: var(--primary); }
+.freq-btn.skipped { border-style: dashed; color: var(--text-muted); }
+.freq-btn { cursor: default; }  /* informativos en modo automático */
+
+/* Selector de oído informativo */
+span.oido-btn { cursor: default; }
+span.oido-btn:not(.active) { opacity: .45; }
+
+/* Escala Contour */
+.contour-list { display: flex; flex-direction: column; gap: 8px; }
+.contour-btn {
+  min-height: 48px; padding: 10px 14px; text-align: left;
+  background: var(--surface); color: var(--text-primary);
+  border: 1.5px solid var(--border); border-left-width: 7px; border-radius: 10px;
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s ease;
+}
+.contour-btn:active { transform: scale(.98); }
+.contour-btn[data-k="1"] { border-left-color: #38bdf8; }
+.contour-btn[data-k="2"] { border-left-color: #14b8a6; }
+.contour-btn[data-k="3"] { border-left-color: #22c55e; }
+.contour-btn[data-k="4"] { border-left-color: #84cc16; }
+.contour-btn[data-k="5"] { border-left-color: #eab308; }
+.contour-btn[data-k="6"] { border-left-color: #f97316; }
+.contour-btn[data-k="7"] { border-left-color: var(--danger); color: var(--danger); }
+
+/* Tablas de resultados */
+.tbw { overflow-x: auto; }
+.tbw table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tbw th { text-align: left; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); padding: 6px 4px; border-bottom: 2px solid var(--border); }
+.tbw td { padding: 7px 4px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font-weight: 500; }
+.tbw tr td:first-child { font-weight: 700; }
+
+/* Calibración */
+.crow { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.crow input { width: 76px; padding: 8px; }
+.crow .btn { min-height: 40px; padding: 6px 10px; }
+
+/* details */
+details { margin: 8px 0; }
+summary { color: var(--primary); font-weight: 600; font-size: 13px; cursor: pointer; }
+
+/* Impresión (conservar lo que ya tenías) */
+@media print {
+  .nav, .btn-row, .noprint, .footer-note { display: none !important; }
+  body { background: #fff; padding-bottom: 0; }
+  .page { display: block !important; }
+  .card, .audiogram-wrap { break-inside: avoid; box-shadow: none; }
+}
+```
+
+Para los botones **no** crees clases nuevas: usá `.btn .btn-primary | .btn-success | .btn-danger`. Lo único que falta es un botón "neutro" para Anterior/Saltar:
+
+```css
+.btn-neutral { color: var(--text-secondary); border-color: var(--border); }
+.btn-neutral:hover, .btn-neutral:active { background: rgba(15,23,42,.04); border-color: var(--text-muted); transform: translateY(-2px); }
+```
+
+---
+
+## 6. Íconos: sacar emojis, usar el sprite
+
+Reutilizá los símbolos existentes del audiómetro: `i-user`, `i-tuning`, `i-volume`, `i-chart`, `i-history`, `i-clipboard`, `i-audiogram`, `i-search`, `i-save`, `i-download`, `i-trash`, `i-headphones`.
+
+Equivalencias:
+
+| Emoji actual | Usar |
+|---|---|
+| 🔊 título | `i-volume` |
+| 📋 Historial | `i-history` |
+| 👤 Paciente | `i-user` |
+| ⚙️ Configuración | `i-tuning` |
+| 📊 Resultados | `i-chart` |
+| 💾 Respaldo | `i-save` |
+| 🎚️ Calibración | `i-tuning` |
+| ▶️ ✕ ✓ ← (en botones) | **Se mantienen** como texto: el audiómetro también usa `▶ ✓ ✕ ↻` |
+
+Agregá un solo símbolo nuevo (compartir/exportar) si lo necesitás; usá `i-download` para CSV y respaldo.
+
+---
+
+## 7. Gráficos: mismo lenguaje que el audiograma
+
+Todos los SVG deben vivir dentro de:
+
+```html
+<div class="audiogram-wrap">
+  <div class="audiogram-title"><svg class="icon"><use href="#i-audiogram"></use></svg> Oído derecho</div>
+  <!-- svg viewBox="0 0 360 262" width="100%" -->
+  <div class="legend">
+    <span style="color:var(--od-color)">○ Umbral</span>
+    <span style="color:var(--ldl-color)">■ LDL</span>
+    <span style="color:var(--range-color)">▮ Rango dinámico</span>
+  </div>
+</div>
+```
+
+Reglas para `ldl-charts.js`:
+
+1. **Colores por oído**: OD = `#2563eb` con símbolo ○; OI = `#14b8a6` con símbolo ×. En el código del LDL cambiá:
+   ```js
+   const COL = ["var(--rd)", "var(--ac)"];   // ❌ hoy
+   const COL = [COLOR_OD, COLOR_OI];          // ✅ (de constants.js)
+   ```
+   Y en `chart()`: el oído derecho dibuja círculo azul, el izquierdo "×" teal (hoy usa rojo/azul).
+2. **Grilla**: líneas `rgba(15,23,42,0.12)`, 0.5px (1px en múltiplos de 20); etiquetas `rgba(15,23,42,0.55)`, tamaño 8–10.
+3. **Eje Y**: mismo rango y orientación que el audiograma (0 arriba, 120 abajo, "dB HL").
+4. **Zona normal**: reemplazá la franja verde actual por la misma convención que el audiómetro (fondo `rgba(124,163,200,0.05)`) y dejá una línea punteada `--ldl-normal` en 90 dB HL con la etiqueta "LDL normal ≥ 90".
+5. **Variables CSS dentro del SVG**: al usar SVG inline (no `<img>`) las `var(--x)` funcionan; mantenelo así.
+6. Quitá cualquier `var(--card)` que haya quedado de la versión oscura: usá `#fff`.
+
+---
+
+## 8. Navegación y lógica: cómo reemplazar `go()` sin romper nada
+
+Mantené los ids de todos los elementos (`pn`, `pa`, `stim`, `who`, `mode`, `mx`, `stp`, `st0`, `off`, `start`, `play`, `up`, `dn`, `mol`, `nomol`, `hp`, `hl`, `tb`, `charts`…). Solo cambiá el router:
+
+```js
+// ldl-ui.js
+const PAGES = ["pg-paciente", "pg-config", "pg-prueba", "pg-resultado", "pg-historial", "pg-calibracion"];
+
+// Mapa del código viejo → páginas nuevas (así no tocás el resto)
+const LEGACY = { s0: "pg-config", s1: "pg-prueba", s2: "pg-resultado", s3: "pg-historial", s4: "pg-calibracion" };
+
+function go(id) {
+  const pageId = LEGACY[id] || id;
+  PAGES.forEach(p => document.getElementById(p).classList.toggle("active", p === pageId));
+  document.querySelectorAll(".nav-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.page === pageId ||
+      (pageId === "pg-calibracion" && b.dataset.page === "pg-config")));
+  window.scrollTo(0, 0);
+  if (pageId === "pg-historial") hist();
+}
+
+document.querySelectorAll("[data-page]").forEach(el =>
+  el.addEventListener("click", () => go(el.dataset.page)));
+```
+
+Cuidado con dos detalles:
+- `hist()` hoy llama a `go("s3")` y `go` llama a `hist()`: eliminá la llamada a `go` dentro de `hist()` para evitar recursión.
+- `render(s)` termina con `go("s2")`: queda igual gracias a `LEGACY`.
+
+### Barra de frecuencias en modo prueba
+
+```js
+function buildProgress() {
+  const box = document.getElementById("ldl-freqs");
+  box.innerHTML = "";
+  conds.forEach((c, k) => {
+    const b = document.createElement("button");
+    b.className = "freq-btn";
+    b.textContent = (c.f ? (c.f >= 1000 ? c.f / 1000 + "k" : c.f) : "Habla") + (c.ear === "Derecho" ? " D" : " I");
+    b.dataset.k = k;
+    box.appendChild(b);
+  });
+}
+function paintProgress() {
+  document.querySelectorAll("#ldl-freqs .freq-btn").forEach((b, k) => {
+    const c = conds[k], v = res[c.ear + c.f];
+    b.classList.toggle("current", k === i);
+    b.classList.toggle("done", v !== undefined && v !== null);
+    b.classList.toggle("skipped", v === null);
+  });
+  const ear = conds[i].ear;
+  document.getElementById("ldl-ear-od").classList.toggle("active", ear === "Derecho");
+  document.getElementById("ldl-ear-oi").classList.toggle("active", ear === "Izquierdo");
+}
+// llamar buildProgress() al iniciar y paintProgress() dentro de show()
+```
+
+---
+
+## 9. Integración entre las dos apps
+
+- En `index.html`, agregá en el footer o en la página Paciente un acceso:
+  ```html
+  <a class="btn btn-primary" href="ldl.html"><svg class="icon"><use href="#i-volume"></use></svg> Abrir prueba LDL</a>
+  ```
+- En `ldl.html`, el mismo acceso inverso hacia `index.html` ("← Audiómetro").
+- Opcional y muy útil: **prellenar datos del paciente**. En el audiómetro, al "Iniciar Evaluación" guardá `sessionStorage.setItem("pac_actual", JSON.stringify(State.paciente))`; en el LDL, al cargar, leé esa clave y completá `#pn`, `#pa`, `#pd`. Y al revés, si ya hay umbrales tonales del paciente, podés autocompletar los inputs `th{Oído}{Hz}` desde `State.resultados` (500, 1000, 2000, 4000 Hz) para evitar tipear.
+- Reutilizá `Classifications` y `COLOR_*`: cargá `constants.js` antes de los módulos del LDL.
+
+---
+
+## 10. Checklist de usabilidad (lo que lo hace "intuitivo y útil")
+
+- [ ] Una sola acción principal por pantalla, con el botón primario más visible.
+- [ ] Botones táctiles ≥ 44px de alto (ya lo da `.btn`).
+- [ ] El nivel actual es el elemento más grande de la pantalla de Prueba.
+- [ ] El oído y la frecuencia actuales nunca se ocultan.
+- [ ] El máximo de seguridad se muestra siempre junto al nivel (barra + "máx −6").
+- [ ] Mensajes de estado con `.mensaje` y `aria-live="polite"` en lugar de `alert()` para avisos no críticos (máximo alcanzado, copiado, etc.). Dejá `confirm()` solo para borrar.
+- [ ] Borrado en dos toques ("¿Seguro?") como ya hacés en historial; mantenelo.
+- [ ] El historial agrupado por paciente con las mismas `.session-card` del audiómetro (nombre, fecha, badges).
+- [ ] Estados vacíos con `.no-sessions`.
+- [ ] Footer de aviso con el mismo `.footer-note`: *"LDL · Niveles relativos, no dB HL sin calibración · Usar auriculares calibrados · Solo referencia clínica"*.
+- [ ] Mantener el aviso de seguridad ("no usar para fijar MPO sin verificación clínica") en Config y en Resultado.
+
+### Seguridad (no tocar al refactorizar)
+
+- Tope `max` y la validación `L + STEP > max` en `up` y en Contour.
+- Inicio `START = Math.min(st0, max - 20)`.
+- El tono de referencia a −40 dB antes de empezar.
+- Rampa de 80 ms en `tone()` (evita clicks fuertes).
+
+---
+
+## 11. Orden de trabajo sugerido (para ir de a un commit por paso)
+
+1. Crear `public/ldl.html`, `css/ldl.css` y copiar head, sprite, nav y footer.
+2. Pasar las páginas **Paciente** y **Config** (solo HTML/CSS, la lógica sigue igual).
+3. Reemplazar `go()` por el router nuevo.
+4. Rediseñar **Prueba** (oído, chips de frecuencia, nivel, botones).
+5. Cambiar `COL` y adaptar `chart/bars/evo/cmp` a la paleta del audiómetro.
+6. Rediseñar **Resultado** (`resumen-grid`, tabla, PDF con jsPDF).
+7. Rediseñar **Historial** y **Calibración** con `.card`, `.session-card`, `.crow`.
+8. Registrar archivos en `sw.js`, subir `CACHE_VERSION`, probar offline.
+9. Probar en celular (iOS Safari + Chrome Android) con auriculares, en modo autoaplicado y clínico.
+
+---
+
+## 12. Prompt maestro para pegar en tu asistente (Copilot / Claude Code / Cursor)
+
+> Estoy refactorizando `ldl.html` para que sea visualmente idéntico a mi app "Audiómetro Clínico Pro" (carpeta `public/`). Reglas:
+>
+> 1. Usá `css/styles.css` tal cual (clases `.nav`, `.nav-btn`, `.page`, `.header`, `.card`, `.card-title`, `.btn .btn-primary|success|danger`, `.btn-row`, `.form-row`, `.form-group`, `.oido-sel`, `.oido-btn`, `.freqs`, `.freq-btn`, `.db-display`, `.audiogram-wrap`, `.resumen-grid`, `.session-card`, `.clasif-badge`, `.mensaje`, `.footer-note`). Solo agregá lo específico en `css/ldl.css`.
+> 2. Tema **solo claro**, sin `prefers-color-scheme: dark`. Quitá los emojis decorativos y usá el sprite SVG `<use href="#i-...">`.
+> 3. Colores de oído: OD = `COLOR_OD` (#2563eb, símbolo ○), OI = `COLOR_OI` (#14b8a6, símbolo ×). Nunca rojo para el oído derecho.
+> 4. Estructura: 5 páginas (`pg-paciente`, `pg-config`, `pg-prueba`, `pg-resultado`, `pg-historial`) + sub-página `pg-calibracion`, con barra de navegación inferior fija.
+> 5. Dividí el JS inline en módulos bajo `js/ldl/` **sin cambiar la lógica** ni los ids de elementos. Reemplazá `go()` por un router de `.page.active` con el mapa `LEGACY` (s0→pg-config, s1→pg-prueba, s2→pg-resultado, s3→pg-historial, s4→pg-calibracion).
+> 6. En la página de Prueba mostrá siempre el oído (`.oido-btn`), la frecuencia actual en chips `.freq-btn` (hecho/actual/omitido) y el nivel en `.db-display` con barra de progreso y máximo de seguridad.
+> 7. Los gráficos SVG van dentro de `.audiogram-wrap` con el mismo estilo de grilla y ejes que `audiogram.js` (eje Y 0–120 dB HL, 0 arriba).
+> 8. Generá el PDF con jsPDF (como `pdf.js`) en lugar de `window.print()`.
+> 9. No modifiques las protecciones de seguridad (nivel máximo, nivel inicial, rampa de 80 ms, tono de referencia).
+> 10. Registrá los nuevos archivos en `sw.js` y subí `CACHE_VERSION`.
+>
+> Trabajá por pasos y mostrame el diff de cada archivo.
+
+---
+
+*Nota clínica: el LDL requiere calibración con equipo certificado para que los dB HL sean válidos. El rediseño es visual y de usabilidad; no cambia el carácter orientativo de la herramienta.*
