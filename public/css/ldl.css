@@ -5,3 +5,4 @@
 .link-btn{display:block;text-align:center;text-decoration:none;color:var(--primary);border:1.5px solid var(--primary);border-radius:10px;padding:12px;font-weight:700;margin-top:12px;background:white}.link-btn:hover{background:#eff6ff}
 .icon{width:19px;height:19px;display:block;margin:0 auto 3px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.nav-btn span{display:block}.card-title{display:block;margin-bottom:8px}
 .icon-inline{display:inline-block;vertical-align:-4px;margin:0 5px 0 0;width:17px;height:17px}.icon-warning{color:var(--warning)}.nav-btn .icon{width:19px;height:19px}
+.cover{margin:4px 0 16px;border-radius:16px;overflow:hidden;background:#e2e8f0;box-shadow:0 4px 16px rgba(15,23,42,.10)}.cover img{display:block;width:100%;height:auto;aspect-ratio:1280/698;object-fit:cover}
