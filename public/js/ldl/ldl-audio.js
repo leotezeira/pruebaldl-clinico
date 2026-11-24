@@ -1,7 +1,8 @@
 ﻿function init(){if(!ctx)ctx=new (window.AudioContext||window.webkitAudioContext)();ctx.resume&&ctx.resume()}
+function dbToGain(db){return Math.pow(10,Math.max(-120,Math.min(0,db))/20)}
 function NB(){if(!nb){nb=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);const d=nb.getChannelData(0);for(let k=0;k<d.length;k++)d[k]=(Math.random()*2-1)*.7}return nb}
 function tone(kind,f,p,db,dur=1.5){
- init();const t=ctx.currentTime,gn=ctx.createGain(),a=Math.pow(10,db/20);let src,out;
+ init();const t=ctx.currentTime,gn=ctx.createGain(),a=dbToGain(db);let src,out;
  if(kind==="tono"){src=ctx.createOscillator();src.frequency.value=f;out=src}
  else{src=ctx.createBufferSource();src.buffer=NB();src.loop=true;
   if(kind==="banda"){const bp=ctx.createBiquadFilter();bp.type="bandpass";bp.frequency.value=f;bp.Q.value=4;src.connect(bp);const m=ctx.createGain();m.gain.value=2.5;bp.connect(m);out=m}
